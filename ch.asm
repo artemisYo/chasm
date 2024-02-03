@@ -7,83 +7,85 @@ section .text
 %define sys_read 0
 %define sys_write 1
 
-struc string
-	.data: resq 1
-	.len:  resq 1
-endstruc
-
-;  rcx: ---
-;  rbx: ---
-;  rsi: string str
-; -> rax: int  count
+;;;  trash rbx
+;;;  trash rcx
+;;;  trash rdi
+;;;  trash rsi: char *str
+;;;  trash rdx: int len
+;;; -> rax: int num
+str_parse_int:
+    mov rdi, 10                 ; const 10 for mul
+    xor rax, rax                ; rax = 0
+    xor rbx, rbx                ; rbx = 0
+    mov rcx, rdx                ; relocate len
+str_parse_loop:
+    jrcxz str_parse_end         ; if len == 0 {return}
+    mov bl, [rsi]               ; bl = *str
+    sub bl, '0'
+    mul rdi                     ; rax *= 10
+    add rax, rbx                ; rax += bl - '0'
+    inc rsi                     ; str++
+    dec rcx                     ; len--
+    jmp str_parse_loop
+str_parse_end:
+    ret
+    
+;;;  trash rbx
+;;;  rsi: char *str
+;;;  rdx: int   len
+;;; -> rax: int  count
 str_count_digits:
-	xor rax, rax
-	mov rcx, [rsi + string.len]
-	mov rsi, [rsi + string.str]
+    xor rax, rax                ; rax = 0
 str_count_digits_loop:
-    jrcxz str_count_digits_done
-	mov bl, [rsi + rax]
-	sub bl, '0'
-	cmp bl, 9
-	ja count_digits_done
-	inc rax
-	dec rcx
+    cmp rax, rdx                ; if rax >= len
+    jae str_count_digits_done   ;     {return}
+	mov bl, [rsi + rax]         ; bl = str[rax]
+	sub bl, '0'                 ; if bl < '0'
+	cmp bl, 9                   ; or bl > '9'
+	ja str_count_digits_done    ;     {return}
+	inc rax                     ; rax++
+    jmp str_count_digits_loop
 str_count_digits_done:
 	ret
 
-;  rcx: ---
-;  rsi: char *data
-; -> rax: int count
-count_digits:
-    xor rax, rax
-count_digits_loop:
-    mov cl, [rsi + rax]
-    sub cl, '0'
-	cmp cl, 9
-	ja count_digits_done
-	inc rax
-	jmp count_digits_loop
-count_digits_done:
-    ret
-
-; TODO!
-;  rsi: string str
+;;;  trash rdi
+;;;  rsi: char *str
+;;;  rdx: int   len
+;;; -> rax: int count
 str_get_input:
-    mov rdx, [rsi + string.len]
-    mov rsi, [rsi + string.str]
-    mov rax, sys_read
+    mov rax, sys_read           ; sys_read -> rax : int
     mov rdi, stdin
     syscall
     ret
 
-;  rdi: ---
-;  rsi: char *buf
-;  rdx: int   count
-; -> rax: int count
-get_input:
-    mov rax, sys_read
-    mov rdi, stdin
-    syscall
-    ret
-
-;  rdi: ---
-;  rsi: char *buf
-;  rdx: int   count
-; -> rax: int count
-print_out:
-    mov rax, sys_write
+;;;  trash rdi
+;;;  rsi: char *str
+;;;  rdx: int   len
+;;; -> rax: int count
+str_print_out:
+    mov rax, sys_write          ; sys_write -> rax : int
     mov rdi, stdout
     syscall
     ret
 
 _start:
-    lea rsi, [rsp-24]
-    mov rdx, 24
-    call get_input
-    call count_digits
+    push rbp
+    mov rbp, rsp
+    sub rsp, 24
+    lea rsi, [rsp]              ; rsi = alloca(24)
+    mov rdx, 24                 ; rdx = 24
+    call str_get_input          ; rdx = strlen(rsi)
     mov rdx, rax
-    call print_out
-    jmp exit
+    call str_count_digits       ; rdx = count_digits(rsi)
+    mov rdx, rax
+    push rdx
+    push rsi
+    call str_parse_int
+    pop rsi
+    pop rdx
+    mov rdi, rax
+    leave
+    jmp exit_with
 
 exit:
     mov rax, 60
